@@ -2,145 +2,146 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Autonomous Exit Router (Async)</title>
+<title>10-Exit Autonomous Router</title>
 <style>
 body { font-family: sans-serif; padding: 20px; }
-#log { white-space: pre-wrap; background: #f4f4f4; padding: 10px; height: 400px; overflow-y: scroll; border: 1px solid #ccc; }
+h1, h2 { margin-bottom: 10px; }
+#log { white-space: pre-wrap; background: #f4f4f4; padding: 10px; height: 300px; overflow-y: scroll; border: 1px solid #ccc; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
 button { padding: 10px 20px; margin-bottom: 10px; }
+.exit-page { margin: 10px 0; padding: 10px; border: 1px dashed #888; }
 </style>
 </head>
 <body>
-<h1>Autonomous Exit Router (Async)</h1>
-<button onclick="runTest()">Run Test</button>
+
+<h1>10-Exit Autonomous Router</h1>
+<p>This site contains 10 hardcoded exit nodes as pages. Each page is a route your engine can use.</p>
+
+<h2>Exit Pages</h2>
+<div id="exitPages"></div>
+
+<h2>Routing Table</h2>
+<table id="routingTable">
+  <thead>
+    <tr><th>Bucket</th><th>Domains</th><th>Exits (URL + buffer)</th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<button onclick="runTest()">Run Routing Test</button>
+
+<h2>Live Log</h2>
 <div id="log"></div>
 
 <script>
 // ---------------------------
-// Hardcoded routing table JSON
-// ---------------------------
+// Hardcoded Routing Table + 10 Exit Pages
 const ROUTES = {
-  "fast": ["youtube.com", "google.com", "facebook.com"],
+  "fast": ["youtube.com", "google.com"],
   "low_latency": ["discord.com", "zoom.us"],
   "bulk": ["windowsupdate.com", "apple.com"]
 };
 
-const HOSTS = {
-  "youtube.com": "142.250.190.174",
-  "google.com": "142.250.190.78",
-  "facebook.com": "157.240.22.35",
-  "discord.com": "162.159.134.232",
-  "zoom.us": "52.10.23.99",
-  "windowsupdate.com": "13.107.246.44",
-  "apple.com": "17.172.224.47"
-};
-
 const EXITS = {
   "fast": [
-    {"ip": "142.250.190.174", "port": 443, "buffer": 65535},
-    {"ip": "142.250.190.78", "port": 443, "buffer": 65535}
+    {"url": "https://site.com/route1", "buffer": 65535},
+    {"url": "https://site.com/route2", "buffer": 65535},
+    {"url": "https://site.com/route3", "buffer": 65535}
   ],
   "low_latency": [
-    {"ip": "162.159.134.232", "port": 443, "buffer": 16384},
-    {"ip": "52.10.23.99", "port": 443, "buffer": 16384}
+    {"url": "https://site.com/route4", "buffer": 16384},
+    {"url": "https://site.com/route5", "buffer": 16384},
+    {"url": "https://site.com/route6", "buffer": 16384}
   ],
   "bulk": [
-    {"ip": "13.107.246.44", "port": 443, "buffer": 131072},
-    {"ip": "17.172.224.47", "port": 443, "buffer": 131072}
+    {"url": "https://site.com/route7", "buffer": 131072},
+    {"url": "https://site.com/route8", "buffer": 131072},
+    {"url": "https://site.com/route9", "buffer": 131072}
   ],
   "default": [
-    {"ip": "8.8.8.8", "port": 53, "buffer": 65535}
+    {"url": "https://site.com/route10", "buffer": 65535}
   ]
 };
 
+const CALL_COUNTS = {};
+
 // ---------------------------
-// Logging helper
+// Display Exit Pages
+function displayExitPages() {
+  const container = document.getElementById("exitPages");
+  for(let i=1;i<=10;i++){
+    const div = document.createElement("div");
+    div.className = "exit-page";
+    div.textContent = `Route ${i}: https://site.com/route${i} — This is a simple exit page.`;
+    container.appendChild(div);
+  }
+}
+displayExitPages();
+
 // ---------------------------
-function log(msg) {
+// Display Routing Table
+function displayRoutingTable() {
+  const tbody = document.querySelector("#routingTable tbody");
+  tbody.innerHTML = "";
+  for (const bucket of Object.keys(ROUTES)) {
+    const domains = ROUTES[bucket].join(", ");
+    const exits = (EXITS[bucket] || []).map(e => `${e.url} (buffer ${e.buffer})`).join(", ");
+    const row = `<tr><td>${bucket}</td><td>${domains}</td><td>${exits}</td></tr>`;
+    tbody.innerHTML += row;
+  }
+}
+displayRoutingTable();
+
+// ---------------------------
+// Routing Engine
+function log(msg){
   const el = document.getElementById("log");
   el.textContent += msg + "\n";
   el.scrollTop = el.scrollHeight;
 }
 
-// ---------------------------
-// Routing logic
-// ---------------------------
-function classifyHost(hostname) {
+function classifyHost(hostname){
   hostname = hostname.toLowerCase();
-  for (const [bucket, domains] of Object.entries(ROUTES)) {
-    for (const d of domains) {
-      if (hostname.endsWith(d)) return bucket;
+  for(const [bucket, domains] of Object.entries(ROUTES)){
+    for(const d of domains){
+      if(hostname.endsWith(d)) return bucket;
     }
   }
   return "default";
 }
 
-function selectExit(bucket) {
+function selectExit(bucket){
   const exits = EXITS[bucket] || EXITS["default"];
-  if (!exits || exits.length === 0) return null;
-  // Shuffle for load balancing
-  return exits[Math.floor(Math.random() * exits.length)];
+  if(!exits || exits.length===0) return null;
+  return exits[Math.floor(Math.random()*exits.length)];
 }
 
-// ---------------------------
-// Simulated connection (async, DNS-free)
-// ---------------------------
-async function connect(hostname) {
+async function connect(hostname){
   const bucket = classifyHost(hostname);
   const exitNode = selectExit(bucket);
+  if(!exitNode) return log(`[FAIL] No exit for ${hostname}`);
 
-  if (!exitNode) {
-    log(`[FAIL] No exit for ${hostname}`);
-    return;
-  }
-
-  const ip = HOSTS[hostname] || exitNode.ip;
-  const port = exitNode.port;
-
-  try {
-    // Use fetch as simulation; in production could use WebSockets or other protocols
-    await fetch(`https://${ip}/`, {mode:"no-cors"});
-    log(`[CALL] ${hostname} routed via ${ip} (${bucket})`);
-    // Monetization: increment counter here
-    incrementCall(hostname, ip);
-  } catch (e) {
-    log(`[FAIL] ${hostname} -> ${ip}: ${e}`);
-    // Failover: try another exit from same bucket if available
-    const exits = EXITS[bucket].filter(e => e.ip !== ip);
-    if (exits.length > 0) {
-      const failover = exits[Math.floor(Math.random() * exits.length)];
-      log(`[RETRY] Trying failover exit ${failover.ip}`);
-      try {
-        await fetch(`https://${failover.ip}/`, {mode:"no-cors"});
-        log(`[CALL-RETRY] ${hostname} routed via ${failover.ip} (${bucket})`);
-        incrementCall(hostname, failover.ip);
-      } catch (err) {
-        log(`[FAIL-RETRY] ${hostname} -> ${failover.ip}: ${err}`);
-      }
+  try{
+    await fetch(exitNode.url, {mode:"no-cors"});
+    log(`[CALL] ${hostname} -> ${exitNode.url} (${bucket})`);
+    const key = `${hostname}@${exitNode.url}`;
+    CALL_COUNTS[key] = (CALL_COUNTS[key]||0)+1;
+  }catch(e){
+    log(`[FAIL] ${hostname} -> ${exitNode.url}: ${e}`);
+    // Failover
+    const exits = EXITS[bucket].filter(e => e.url!==exitNode.url);
+    if(exits.length>0){
+      const failover = exits[Math.floor(Math.random()*exits.length)];
+      log(`[RETRY] Trying failover exit ${failover.url}`);
+      await connect(hostname);
     }
   }
 }
 
-// ---------------------------
-// Monetization / call counters
-// ---------------------------
-const CALL_COUNTS = {};
-
-function incrementCall(hostname, exitIp) {
-  const key = `${hostname}@${exitIp}`;
-  CALL_COUNTS[key] = (CALL_COUNTS[key] || 0) + 1;
-  log(`[COUNT] ${key} = ${CALL_COUNTS[key]}`);
-}
-
-// ---------------------------
-// Run async test for multiple hosts
-// ---------------------------
-async function runTest() {
-  const hosts = [
-    "youtube.com", "discord.com", "windowsupdate.com", "zoom.us",
-    "google.com", "apple.com", "facebook.com"
-  ];
-  const tasks = hosts.map(h => connect(h));
-  await Promise.all(tasks); // fully concurrent
+async function runTest(){
+  const hosts = ["youtube.com","discord.com","windowsupdate.com","zoom.us","google.com","apple.com"];
+  await Promise.all(hosts.map(h=>connect(h)));
 }
 </script>
 </body>
