@@ -45,22 +45,22 @@ const ROUTES = {
 
 const EXITS = {
   "fast": [
-    {"url": "https://site.com/route1", "buffer": 65535},
-    {"url": "https://site.com/route2", "buffer": 65535},
-    {"url": "https://site.com/route3", "buffer": 65535}
+    {"url": "https://site.com/route1.json", "buffer": 65535},
+    {"url": "https://site.com/route2.json", "buffer": 65535},
+    {"url": "https://site.com/route3.json", "buffer": 65535}
   ],
   "low_latency": [
-    {"url": "https://site.com/route4", "buffer": 16384},
-    {"url": "https://site.com/route5", "buffer": 16384},
-    {"url": "https://site.com/route6", "buffer": 16384}
+    {"url": "https://site.com/route4.json", "buffer": 16384},
+    {"url": "https://site.com/route5.json", "buffer": 16384},
+    {"url": "https://site.com/route6.json", "buffer": 16384}
   ],
   "bulk": [
-    {"url": "https://site.com/route7", "buffer": 131072},
-    {"url": "https://site.com/route8", "buffer": 131072},
-    {"url": "https://site.com/route9", "buffer": 131072}
+    {"url": "https://site.com/route7.json", "buffer": 131072},
+    {"url": "https://site.com/route8.json", "buffer": 131072},
+    {"url": "https://site.com/route9.json", "buffer": 131072}
   ],
   "default": [
-    {"url": "https://site.com/route10", "buffer": 65535}
+    {"url": "https://site.com/route10.json", "buffer": 65535}
   ]
 };
 
@@ -73,7 +73,7 @@ function displayExitPages() {
   for(let i=1;i<=10;i++){
     const div = document.createElement("div");
     div.className = "exit-page";
-    div.textContent = `Route ${i}: https://site.com/route${i} — This is a simple exit page.`;
+    div.textContent = `Route ${i}: https://site.com/route${i}.json — This is a simple exit page with a JSON response.`;
     container.appendChild(div);
   }
 }
@@ -123,8 +123,14 @@ async function connect(hostname){
   if(!exitNode) return log(`[FAIL] No exit for ${hostname}`);
 
   try{
-    await fetch(exitNode.url, {mode:"no-cors"});
-    log(`[CALL] ${hostname} -> ${exitNode.url} (${bucket})`);
+    const res = await fetch(exitNode.url, {mode:"cors"});
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      data = await res.text();
+    }
+    log(`[CALL] ${hostname} -> ${exitNode.url} (${bucket}) | Response: ${JSON.stringify(data)}`);
     const key = `${hostname}@${exitNode.url}`;
     CALL_COUNTS[key] = (CALL_COUNTS[key]||0)+1;
   }catch(e){
@@ -139,6 +145,8 @@ async function connect(hostname){
   }
 }
 
+// ---------------------------
+// Run multiple hosts
 async function runTest(){
   const hosts = ["youtube.com","discord.com","windowsupdate.com","zoom.us","google.com","apple.com"];
   await Promise.all(hosts.map(h=>connect(h)));
