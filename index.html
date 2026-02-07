@@ -2,41 +2,45 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>10-Exit Autonomous Router</title>
+<title>Static 10-Exit Router Demo</title>
 <style>
 body { font-family: sans-serif; padding: 20px; }
 h1, h2 { margin-bottom: 10px; }
-#log { white-space: pre-wrap; background: #f4f4f4; padding: 10px; height: 300px; overflow-y: scroll; border: 1px solid #ccc; }
-table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-button { padding: 10px 20px; margin-bottom: 10px; }
+#log, #response { white-space: pre-wrap; background: #f4f4f4; padding: 10px; height: 200px; overflow-y: scroll; border: 1px solid #ccc; margin-bottom: 20px; }
 .exit-page { margin: 10px 0; padding: 10px; border: 1px dashed #888; }
+button { padding: 10px 20px; margin-bottom: 10px; }
+table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
 </style>
 </head>
 <body>
 
-<h1>10-Exit Autonomous Router</h1>
-<p>This site contains 10 hardcoded exit nodes as pages. Each page is a route your engine can use.</p>
+<h1>Static 10-Exit Router Demo</h1>
+<p>Type a website or domain below to route it through our static exits.</p>
 
-<h2>Exit Pages</h2>
-<div id="exitPages"></div>
-
-<h2>Routing Table</h2>
-<table id="routingTable">
-  <thead>
-    <tr><th>Bucket</th><th>Domains</th><th>Exits (URL + buffer)</th></tr>
-  </thead>
-  <tbody></tbody>
-</table>
-
-<button onclick="runTest()">Run Routing Test</button>
+<input type="text" id="urlInput" placeholder="Enter domain e.g. youtube.com" style="width:300px; padding:5px;">
+<button onclick="routeURL()">Route URL</button>
 
 <h2>Live Log</h2>
 <div id="log"></div>
 
+<h2>Exit Response</h2>
+<div id="response"></div>
+
+<h2>Analytics Dashboard</h2>
+<table id="analytics">
+<thead>
+<tr><th>Route</th><th>Hits</th></tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<h2>Exit Pages</h2>
+<div id="exitPages"></div>
+
 <script>
 // ---------------------------
-// Hardcoded Routing Table + 10 Exit Pages
+// Routing Table + Exits
 const ROUTES = {
   "fast": ["youtube.com", "google.com"],
   "low_latency": ["discord.com", "zoom.us"],
@@ -44,57 +48,25 @@ const ROUTES = {
 };
 
 const EXITS = {
-  "fast": [
-    {"url": "https://site.com/route1.json", "buffer": 65535},
-    {"url": "https://site.com/route2.json", "buffer": 65535},
-    {"url": "https://site.com/route3.json", "buffer": 65535}
-  ],
-  "low_latency": [
-    {"url": "https://site.com/route4.json", "buffer": 16384},
-    {"url": "https://site.com/route5.json", "buffer": 16384},
-    {"url": "https://site.com/route6.json", "buffer": 16384}
-  ],
-  "bulk": [
-    {"url": "https://site.com/route7.json", "buffer": 131072},
-    {"url": "https://site.com/route8.json", "buffer": 131072},
-    {"url": "https://site.com/route9.json", "buffer": 131072}
-  ],
-  "default": [
-    {"url": "https://site.com/route10.json", "buffer": 65535}
-  ]
+  "fast": ["route1.html","route2.html","route3.html"],
+  "low_latency": ["route4.html","route5.html","route6.html"],
+  "bulk": ["route7.html","route8.html","route9.html"],
+  "default": ["route10.html"]
 };
 
 const CALL_COUNTS = {};
 
-// ---------------------------
-// Display Exit Pages
-function displayExitPages() {
-  const container = document.getElementById("exitPages");
-  for(let i=1;i<=10;i++){
-    const div = document.createElement("div");
-    div.className = "exit-page";
-    div.textContent = `Route ${i}: https://site.com/route${i}.json — This is a simple exit page with a JSON response.`;
-    container.appendChild(div);
-  }
+// Display exit pages
+const container = document.getElementById("exitPages");
+for(let i=1;i<=10;i++){
+  const div = document.createElement("div");
+  div.className="exit-page";
+  div.textContent=`Route ${i}: route${i}.html`;
+  container.appendChild(div);
 }
-displayExitPages();
 
 // ---------------------------
-// Display Routing Table
-function displayRoutingTable() {
-  const tbody = document.querySelector("#routingTable tbody");
-  tbody.innerHTML = "";
-  for (const bucket of Object.keys(ROUTES)) {
-    const domains = ROUTES[bucket].join(", ");
-    const exits = (EXITS[bucket] || []).map(e => `${e.url} (buffer ${e.buffer})`).join(", ");
-    const row = `<tr><td>${bucket}</td><td>${domains}</td><td>${exits}</td></tr>`;
-    tbody.innerHTML += row;
-  }
-}
-displayRoutingTable();
-
-// ---------------------------
-// Routing Engine
+// Helpers
 function log(msg){
   const el = document.getElementById("log");
   el.textContent += msg + "\n";
@@ -113,43 +85,45 @@ function classifyHost(hostname){
 
 function selectExit(bucket){
   const exits = EXITS[bucket] || EXITS["default"];
-  if(!exits || exits.length===0) return null;
   return exits[Math.floor(Math.random()*exits.length)];
 }
 
-async function connect(hostname){
-  const bucket = classifyHost(hostname);
-  const exitNode = selectExit(bucket);
-  if(!exitNode) return log(`[FAIL] No exit for ${hostname}`);
-
-  try{
-    const res = await fetch(exitNode.url, {mode:"cors"});
-    let data;
-    try {
-      data = await res.json();
-    } catch {
-      data = await res.text();
-    }
-    log(`[CALL] ${hostname} -> ${exitNode.url} (${bucket}) | Response: ${JSON.stringify(data)}`);
-    const key = `${hostname}@${exitNode.url}`;
-    CALL_COUNTS[key] = (CALL_COUNTS[key]||0)+1;
-  }catch(e){
-    log(`[FAIL] ${hostname} -> ${exitNode.url}: ${e}`);
-    // Failover
-    const exits = EXITS[bucket].filter(e => e.url!==exitNode.url);
-    if(exits.length>0){
-      const failover = exits[Math.floor(Math.random()*exits.length)];
-      log(`[RETRY] Trying failover exit ${failover.url}`);
-      await connect(hostname);
-    }
+function updateAnalytics(){
+  const tbody = document.querySelector("#analytics tbody");
+  tbody.innerHTML = "";
+  for(const exit of Object.values(EXITS).flat()){
+    const hits = CALL_COUNTS[exit] || 0;
+    tbody.innerHTML += `<tr><td>${exit}</td><td>${hits}</td></tr>`;
   }
 }
 
 // ---------------------------
-// Run multiple hosts
-async function runTest(){
-  const hosts = ["youtube.com","discord.com","windowsupdate.com","zoom.us","google.com","apple.com"];
-  await Promise.all(hosts.map(h=>connect(h)));
+// Main routing function
+async function routeURL(){
+  const url = document.getElementById("urlInput").value.trim();
+  if(!url) return alert("Enter a URL or domain!");
+
+  const bucket = classifyHost(url);
+  let exit = selectExit(bucket);
+
+  try{
+    const res = await fetch(exit, {mode:"cors"});
+    const html = await res.text();
+    CALL_COUNTS[exit] = (CALL_COUNTS[exit] || 0) + 1;
+
+    log(`[CALL] ${url} -> ${exit} (${bucket})`);
+    document.getElementById("response").innerHTML = html; // Render HTML
+    updateAnalytics();
+  }catch(e){
+    log(`[FAIL] ${url} -> ${exit}: ${e}`);
+    // failover
+    const otherExits = EXITS[bucket].filter(e=>e!==exit);
+    if(otherExits.length>0){
+      exit = otherExits[Math.floor(Math.random()*otherExits.length)];
+      log(`[RETRY] Trying failover exit ${exit}`);
+      routeURL(); // retry
+    }
+  }
 }
 </script>
 </body>
